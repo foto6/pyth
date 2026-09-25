@@ -73,37 +73,15 @@ jobs:
           awk 'BEGIN{n=0} /^diff -ruN /{n++} n>=2{print}' dailyfocus-current.patch > dailyfocus-code.patch
           patch --batch --forward -p0 -d build-src < dailyfocus-code.patch
 
-          # Keep documentation aligned, but never use it as a build-critical patch target.
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path("build-src/DailyFocus/README.md")
-          if p.exists():
-              s = p.read_text()
-              replacements = {
-                  "сравнивает его с дневным лимитом": "сравнивает его с дневной целью",
-                  "Настраиваемый дневной лимит": "Настраиваемая дневная цель",
-                  "статусом лимита": "статусом цели",
-                  "плашку **«Лимит»**": "плашку **«Цель»**",
-                  "изменить дневной лимит": "изменить дневную цель",
-              }
-              for a, b in replacements.items():
-                  s = s.replace(a, b)
-              p.write_text(s)
-          else:
-              p.write_text("""# Daily Focus
-
-Локальный Android-ежедневник с домашним виджетом.
-
-- Суммирует время Firefox + ChatGPT за текущий день.
-- Дневная цель по умолчанию: 2 часа, настраивается в приложении.
-- Задачи можно отмечать выполненными прямо на виджете.
-- Незавершённые задачи переносятся на следующий день.
-- Данные остаются локально; INTERNET permission отсутствует.
-- Для статистики требуется системный «Доступ к статистике использования».
-
-StayFree не нужен: приложение читает UsageStatsManager напрямую.
-""")
-          PY
+          # README is packaging documentation, not a build dependency.
+          if [ ! -f build-src/DailyFocus/README.md ]; then
+            printf '%s\n' '# Daily Focus' '' 'Локальный Android-ежедневник: Firefox + ChatGPT, дневная цель и задачи.' > build-src/DailyFocus/README.md
+          fi
+          sed -i 's/сравнивает его с дневным лимитом/сравнивает его с дневной целью/g' build-src/DailyFocus/README.md
+          sed -i 's/Настраиваемый дневной лимит/Настраиваемая дневная цель/g' build-src/DailyFocus/README.md
+          sed -i 's/статусом лимита/статусом цели/g' build-src/DailyFocus/README.md
+          sed -i 's/«Лимит»/«Цель»/g' build-src/DailyFocus/README.md
+          sed -i 's/изменить дневной лимит/изменить дневную цель/g' build-src/DailyFocus/README.md
 
       - name: Generate Gradle wrapper
         working-directory: build-src/DailyFocus
