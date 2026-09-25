@@ -106,6 +106,13 @@ jobs:
           tar -xzf widget-redesign-overlay.tar.gz -C build-src/DailyFocus
           test -f build-src/DailyFocus/tools/widget_layout_stress.py
 
+      - name: Apply ergonomic task interaction v2
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "c6766454491347e30b6e415c103a59ee3b6f8330813b54d65a7384e367b64aee  ci/apply_widget_ux_v2.py" | sha256sum -c -
+          python3 ci/apply_widget_ux_v2.py build-src/DailyFocus
+
       - name: Generate Gradle wrapper
         working-directory: build-src/DailyFocus
         run: gradle wrapper --gradle-version 8.10.2
