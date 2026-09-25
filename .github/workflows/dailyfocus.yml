@@ -89,7 +89,25 @@ jobs:
               for a, b in replacements.items():
                   s = s.replace(a, b)
               p.write_text(s)
+          else:
+              p.write_text("""# Daily Focus
+
+Локальный Android-ежедневник с домашним виджетом.
+
+- Суммирует время Firefox + ChatGPT за текущий день.
+- Дневная цель по умолчанию: 2 часа, настраивается в приложении.
+- Задачи можно отмечать выполненными прямо на виджете.
+- Незавершённые задачи переносятся на следующий день.
+- Данные остаются локально; INTERNET permission отсутствует.
+- Для статистики требуется системный «Доступ к статистике использования».
+
+StayFree не нужен: приложение читает UsageStatsManager напрямую.
+""")
           PY
+
+      - name: Generate Gradle wrapper
+        working-directory: build-src/DailyFocus
+        run: gradle wrapper --gradle-version 8.10.2
 
       - name: Static verification
         run: python3 build-src/DailyFocus/tools/static_verify.py
