@@ -8,7 +8,7 @@ The Android client is a native CameraX + Kotlin application. It does not need Py
 - JDK 17.
 - Android SDK 36.
 - Gradle 9.6.0 (Android Studio can provision the matching Gradle version).
-- `android/app/src/main/assets/yolo11n.onnx` generated as described in `../models/README.md`.
+- A fixed-size YOLO11/YOLOv8 COCO ONNX model. You can either bundle it at `app/src/main/assets/yolo11n.onnx` before building, or import it from phone storage at first launch.
 
 CameraX is pinned to 1.6.2 and ONNX Runtime Android to 1.30.0 in this snapshot.
 

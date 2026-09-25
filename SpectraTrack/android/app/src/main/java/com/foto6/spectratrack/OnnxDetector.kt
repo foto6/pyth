@@ -8,37 +8,67 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import java.io.File
 import java.nio.FloatBuffer
 import kotlin.math.max
 import kotlin.math.min
 
-class OnnxDetector(
-    context: Context,
-    modelAsset: String = "yolo11n.onnx",
-    labelsAsset: String = "coco80.txt",
-    private val inputSize: Int = 640,
-    private val confidence: Float = 0.35f,
-    private val iouThreshold: Float = 0.45f,
+class OnnxDetector private constructor(
+    private val env: OrtEnvironment,
+    private val session: OrtSession,
+    private val labels: List<String>,
+    val providerLabel: String,
+    private val inputSize: Int,
+    private val confidence: Float,
+    private val iouThreshold: Float,
 ) : AutoCloseable {
-    private val env = OrtEnvironment.getEnvironment()
-    private val session: OrtSession
-    private val labels: List<String>
-    val providerLabel: String
-
-    init {
-        labels = context.assets.open(labelsAsset).bufferedReader().useLines { it.filter(String::isNotBlank).toList() }
-        val bytes = context.assets.open(modelAsset).use { it.readBytes() }
-        val options = OrtSession.SessionOptions()
-        options.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
-        var provider = "CPU"
-        try {
-            options.addNnapi()
-            provider = "NNAPI"
-        } catch (_: Throwable) {
-            // CPU fallback is intentional. Some ONNX graphs are faster on CPU than fragmented NNAPI execution.
+    companion object {
+        fun fromBytes(
+            context: Context,
+            modelBytes: ByteArray,
+            labelsAsset: String = "coco80.txt",
+            inputSize: Int = 640,
+            confidence: Float = 0.35f,
+            iouThreshold: Float = 0.45f,
+        ): OnnxDetector {
+            val env = OrtEnvironment.getEnvironment()
+            val labels = context.assets.open(labelsAsset).bufferedReader().useLines {
+                it.filter(String::isNotBlank).toList()
+            }
+            val options = OrtSession.SessionOptions()
+            options.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+            var provider = "CPU"
+            try {
+                options.addNnapi()
+                provider = "NNAPI"
+            } catch (_: Throwable) {
+            }
+            val session = env.createSession(modelBytes, options)
+            return OnnxDetector(env, session, labels, provider, inputSize, confidence, iouThreshold)
         }
-        session = env.createSession(bytes, options)
-        providerLabel = provider
+
+        fun fromFile(
+            context: Context,
+            file: File,
+            inputSize: Int = 640,
+            confidence: Float = 0.35f,
+            iouThreshold: Float = 0.45f,
+        ): OnnxDetector = fromBytes(context, file.readBytes(), inputSize = inputSize, confidence = confidence, iouThreshold = iouThreshold)
+
+        fun fromAssetIfPresent(
+            context: Context,
+            assetName: String = "yolo11n.onnx",
+            inputSize: Int = 640,
+            confidence: Float = 0.35f,
+            iouThreshold: Float = 0.45f,
+        ): OnnxDetector? {
+            return try {
+                val bytes = context.assets.open(assetName).use { it.readBytes() }
+                fromBytes(context, bytes, inputSize = inputSize, confidence = confidence, iouThreshold = iouThreshold)
+            } catch (_: java.io.FileNotFoundException) {
+                null
+            }
+        }
     }
 
     fun detect(source: Bitmap): List<Detection> {
@@ -115,13 +145,11 @@ class OnnxDetector(
             if (transposed) data[feature * rows + row] else data[row * features + feature]
 
         var normalized = true
-        run {
-            val checks = min(rows, 32)
-            for (r in 0 until checks) {
-                if (value(r, 0) > 2.5f || value(r, 2) > 2.5f) {
-                    normalized = false
-                    break
-                }
+        val checks = min(rows, 32)
+        for (r in 0 until checks) {
+            if (value(r, 0) > 2.5f || value(r, 2) > 2.5f) {
+                normalized = false
+                break
             }
         }
 
