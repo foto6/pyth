@@ -84,12 +84,37 @@ jobs:
           sed -i 's/«Лимит»/«Цель»/g' build-src/DailyFocus/README.md
           sed -i 's/изменить дневной лимит/изменить дневную цель/g' build-src/DailyFocus/README.md
 
+
+      - name: Apply wallpaper-matched widget redesign
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "1ac940e79b08e24efe92227e5778e63bc6b92dfb43ddad216d3e9a2be5b5d98f  widget-redesign-overlay.tar.gz" | sha256sum -c -
+          python3 - <<'PY'
+          from pathlib import PurePosixPath
+          import tarfile
+          archive = "widget-redesign-overlay.tar.gz"
+          with tarfile.open(archive, "r:gz") as tf:
+              members = tf.getmembers()
+              if len(members) != 16:
+                  raise SystemExit(f"unexpected overlay file count: {len(members)}")
+              for member in members:
+                  path = PurePosixPath(member.name)
+                  if path.is_absolute() or ".." in path.parts or not member.isfile():
+                      raise SystemExit(f"unsafe overlay entry: {member.name}")
+          PY
+          tar -xzf widget-redesign-overlay.tar.gz -C build-src/DailyFocus
+          test -f build-src/DailyFocus/tools/widget_layout_stress.py
+
       - name: Generate Gradle wrapper
         working-directory: build-src/DailyFocus
         run: gradle wrapper --gradle-version 8.10.2
 
       - name: Static verification
         run: python3 build-src/DailyFocus/tools/static_verify.py
+
+      - name: Widget layout stress test
+        run: python3 build-src/DailyFocus/tools/widget_layout_stress.py
 
       - name: Visual preview smoke test
         continue-on-error: true
