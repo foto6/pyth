@@ -72,6 +72,7 @@ jobs:
           # README is documentation and may differ from the build snapshot; exclude its diff.
           awk 'BEGIN{n=0} /^diff -ruN /{n++} n>=2{print}' dailyfocus-current.patch > dailyfocus-code.patch
           patch --batch --forward -p0 -d build-src < dailyfocus-code.patch
+          patch --batch --forward -p0 -d build-src < patches/dailyfocus-hardening.patch
 
           # README is packaging documentation, not a build dependency.
           if [ ! -f build-src/DailyFocus/README.md ]; then
