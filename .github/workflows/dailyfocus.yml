@@ -108,7 +108,7 @@ jobs:
           APK="build-src/DailyFocus/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           unzip -t "$APK" >/dev/null
-          jarsigner -verify "$APK" >/dev/null
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$APK" | tee apk-badging.txt
           grep -q "package: name='com.foto6.dailyfocus'" apk-badging.txt
 
