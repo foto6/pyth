@@ -1,0 +1,148 @@
+om(0xD411F0C)
++        repeat(100_000) {
++            val used = random.nextLong(-86_400_000L, 172_800_001L)
++            val goal = random.nextInt(-120, 1_561)
++            val progress = FocusMath.progressPermille(used, goal)
++            val remaining = FocusMath.remainingMs(used, goal)
++            val over = FocusMath.overGoalMs(used, goal)
++            assertTrue(progress in 0..1000)
++            assertTrue(remaining >= 0L)
++            assertTrue(over >= 0L)
++            if (goal > 0) {
++                val safeUsed = used.coerceAtLeast(0L)
++                val goalMs = goal * 60_000L
++                assertEquals((goalMs - safeUsed).coerceAtLeast(0L), remaining)
++                assertEquals((safeUsed - goalMs).coerceAtLeast(0L), over)
++                assertTrue(remaining == 0L || over == 0L)
++            }
++        }
++    }
+ }
+diff -ruN '--exclude=.gradle' '--exclude=build' df_old/DailyFocus/app/src/test/java/com/foto6/dailyfocus/core/WidgetLayoutPolicyTest.kt DailyFocus/app/src/test/java/com/foto6/dailyfocus/core/WidgetLayoutPolicyTest.kt
+--- df_old/DailyFocus/app/src/test/java/com/foto6/dailyfocus/core/WidgetLayoutPolicyTest.kt	1970-01-01 00:00:00.000000000 +0000
++++ DailyFocus/app/src/test/java/com/foto6/dailyfocus/core/WidgetLayoutPolicyTest.kt	2026-09-25 07:31:35.855738588 +0000
+@@ -0,0 +1,16 @@
++package com.foto6.dailyfocus.core
++
++import org.junit.Assert.assertEquals
++import org.junit.Test
++
++class WidgetLayoutPolicyTest {
++    @Test fun tinyWidgetShowsOneTask() = assertEquals(1, WidgetLayoutPolicy.forHeight(185).maxTasks)
++    @Test fun boundary230ShowsTwoTasks() = assertEquals(2, WidgetLayoutPolicy.forHeight(230).maxTasks)
++    @Test fun boundary285ShowsThreeTasks() = assertEquals(3, WidgetLayoutPolicy.forHeight(285).maxTasks)
++    @Test fun boundary320ShowsFourTasks() = assertEquals(4, WidgetLayoutPolicy.forHeight(320).maxTasks)
++    @Test fun tinyWidgetHidesSecondaryLines() {
++        val layout = WidgetLayoutPolicy.forHeight(185)
++        assertEquals(false, layout.showStatus)
++        assertEquals(false, layout.showApps)
++    }
++}
+diff -ruN '--exclude=.gradle' '--exclude=build' df_old/DailyFocus/tools/static_verify.py DailyFocus/tools/static_verify.py
+--- df_old/DailyFocus/tools/static_verify.py	1970-01-01 00:00:00.000000000 +0000
++++ DailyFocus/tools/static_verify.py	2026-09-25 07:32:49.709881594 +0000
+@@ -0,0 +1,63 @@
++#!/usr/bin/env python3
++from pathlib import Path
++import re
++import sys
++import xml.etree.ElementTree as ET
++
++ROOT = Path(__file__).resolve().parents[1]
++errors=[]
++
++def fail(msg): errors.append(msg)
++
++# Parse all authored XML.
++for path in (ROOT/'app/src/main').rglob('*.xml'):
++    try: ET.parse(path)
++    except Exception as e: fail(f'XML parse failed: {path.relative_to(ROOT)}: {e}')
++
++# Manifest privacy/safety invariants.
++manifest=(ROOT/'app/src/main/AndroidManifest.xml').read_text(encoding='utf-8')
++if 'android.permission.INTERNET' in manifest: fail('INTERNET permission must not be present')
++if 'android.permission.PACKAGE_USAGE_STATS' not in manifest: fail('PACKAGE_USAGE_STATS permission missing')
++for pkg in ('org.mozilla.firefox','com.openai.chatgpt'):
++    if pkg not in manifest: fail(f'package query missing: {pkg}')
++
++# Every R.id referenced by widget code must exist in widget XML.
++widget_code=(ROOT/'app/src/main/java/com/foto6/dailyfocus/widget/DailyFocusWidgetProvider.kt').read_text(encoding='utf-8')
++widget_xml=(ROOT/'app/src/main/res/layout/widget_daily_focus.xml').read_text(encoding='utf-8')
++ids=set(re.findall(r'R\.id\.([A-Za-z0-9_]+)',widget_code))
++xmlids=set(re.findall(r'@\+id/([A-Za-z0-9_]+)',widget_xml))
++for x in sorted(ids-xmlids): fail(f'widget code references missing id: {x}')
++
++# Resource references exist for the small app-owned resource set.
++for kind in ('color','drawable','layout','xml'):
++    refs=set()
++    for path in (ROOT/'app/src/main').rglob('*'):
++        if path.is_file() and path.suffix in {'.kt','.xml'}:
++            try: txt=path.read_text(encoding='utf-8')
++            except UnicodeDecodeError: continue
++            refs.update(re.findall(rf'(?:R\.{kind}\.|@{kind}/)([A-Za-z0-9_]+)',txt))
++    if kind=='color':
++        txt=(ROOT/'app/src/main/res/values/colors.xml').read_text(encoding='utf-8')
++        owned=set(re.findall(r'<color\s+name="([^"]+)"',txt))
++    else:
++        owned={p.stem for p in (ROOT/f'app/src/main/res/{kind}').glob('*')} if (ROOT/f'app/src/main/res/{kind}').exists() else set()
++    # Ignore library/framework resources; only require app-prefixed refs and known owned refs.
++    for ref in sorted(refs):
++        if ref.startswith(('widget_','daily_focus','app_icon')) and ref not in owned:
++            fail(f'missing @{kind}/{ref}')
++
++# No accidental old "limit" semantics in UI/source.
++for path in list((ROOT/'app/src/main/java').rglob('*.kt')) + [ROOT/'README.md']:
++    txt=path.read_text(encoding='utf-8')
++    if re.search(r'\b(limitMinutes|formatLimit|overLimit|DEFAULT_LIMIT|MIN_LIMIT|MAX_LIMIT)\b',txt):
++        fail(f'legacy limit semantic remains in {path.relative_to(ROOT)}')
++
++# Core files expected by packaging.
++for rel in ['gradlew','gradle/wrapper/gradle-wrapper.jar','app/build.gradle.kts','app/src/main/AndroidManifest.xml']:
++    if not (ROOT/rel).is_file(): fail(f'missing required file: {rel}')
++
++if errors:
++    print('STATIC VERIFY FAILED')
++    for e in errors: print(' -',e)
++    sys.exit(1)
++print(f'STATIC VERIFY PASS: XML/resources/manifest/widget ids/privacy invariants')
+diff -ruN '--exclude=.gradle' '--exclude=build' df_old/DailyFocus/tools/visual_smoke.py DailyFocus/tools/visual_smoke.py
+--- df_old/DailyFocus/tools/visual_smoke.py	1970-01-01 00:00:00.000000000 +0000
++++ DailyFocus/tools/visual_smoke.py	2026-09-25 07:32:49.711356533 +0000
+@@ -0,0 +1,45 @@
++#!/usr/bin/env python3
++"""Non-fatal visual preview smoke test.
++
++Creates lightweight SVG layout previews. Failure to write previews must never fail
++an Android build; compile/unit/static tests remain the source of truth.
++"""
++from pathlib import Path
++import html, os, tempfile
++
++def choose_out():
++    requested=os.environ.get('DAILYFOCUS_VISUAL_OUT')
++    candidates=[]
++    if requested: candidates.append(Path(requested))
++    candidates.append(Path(tempfile.mkdtemp(prefix='dailyfocus_visual_')))
++    for out in candidates:
++        try:
++            out.mkdir(parents=True, exist_ok=True)
++            probe=out/'.write-test'
++            probe.write_text('ok', encoding='utf-8'); probe.unlink()
++            return out
++        except Exception as e:
++            print(f'Visual output unavailable at {out}: {e}')
++    return None
++
++def svg(width,height,compact=False):
++    tasks=1 if compact else 4
++    secondary='' if compact else '''<text x="24" y="139" class="muted">Цель выполнена · +17м</text><text x="24" y="166" class="small">Firefox 1ч 21м · ChatGPT 56м</text>'''
++    y=175 if compact else 205
++    rows=''.join(f'<text x="25" y="{y+i*34}" class="task">○  {html.escape(t)}</text>' for i,t in enumerate([
++        'Доделать математику ЕГЭ','Разобрать 20 задач по Python','Прочитать 30 страниц','Проверить проект манхвы'][:tasks]))
++    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}"><style>.bg{{fill:#15191f}}.accent{{fill:#9cff72}}.title{{fill:#9cff72;font:700 13px sans-serif;letter-spacing:1px}}.big{{fill:#f5f7f9;font:700 34px sans-serif}}.muted{{fill:#aab2bd;font:16px sans-serif}}.small{{fill:#aab2bd;font:13px sans-serif}}.head{{fill:#f5f7f9;font:700 14px sans-serif}}.task{{fill:#f5f7f9;font:14px sans-serif}}</style><rect class="bg" width="100%" height="100%" rx="24"/><text x="24" y="32" class="title">FOCUS · СЕГОДНЯ</text><text x="24" y="88" class="big">2ч 17м / 2ч</text><rect x="24" y="104" width="{width-48}" height="8" rx="4" class="accent"/>{secondary}<text x="24" y="{y-18}" class="head">ЗАДАЧИ</text>{rows}</svg>'''
++
++def main():
++    try:
++        out=choose_out()
++        if out is None:
++    
