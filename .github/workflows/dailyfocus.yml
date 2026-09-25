@@ -142,6 +142,15 @@ jobs:
         working-directory: build-src/DailyFocus
         run: gradle --no-daemon clean testDebugUnitTest assembleDebug --stacktrace
 
+      - name: Re-sign APK with stable DailyFocus dev key
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="build-src/DailyFocus/app/build/outputs/apk/debug/app-debug.apk"
+          SIGNED="build-src/DailyFocus/app/build/outputs/apk/debug/app-debug-stable.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$HOME/.android/debug.keystore"             --ks-pass pass:android             --ks-key-alias androiddebugkey             --key-pass pass:android             --out "$SIGNED"             "$APK"
+          mv "$SIGNED" "$APK"
+
       - name: Verify APK structure and signature
         shell: bash
         run: |
