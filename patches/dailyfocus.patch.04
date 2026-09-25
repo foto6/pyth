@@ -1,9 +1,0 @@
-        print('Visual preview skipped: no writable directory')
-+            return 0
-+        (out/'widget_compact.svg').write_text(svg(360,220,True),encoding='utf-8')
-+        (out/'widget_large.svg').write_text(svg(360,360,False),encoding='utf-8')
-+        print(f'Visual preview PASS: {out}')
-+    except Exception as e:
-+        print(f'Visual preview skipped: {e}')
-+    return 0
-+if __name__=='__main__': raise SystemExit(main())

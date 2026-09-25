@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#000000</color>
+
+    <!-- Palette sampled from the user's wallpaper: sky, clouds, tea cream, leaves, warm wood. -->
+    <color name="widget_background_start">#F0F6FBF0</color>
+    <color name="widget_background_end">#F2F4E9DC</color>
+    <color name="widget_border">#8CFFFFFF</color>
+    <color name="widget_panel">#CFFBFCF4</color>
+    <color name="widget_panel_border">#59FFFFFF</color>
+
+    <color name="widget_text">#17313B</color>
+    <color name="widget_muted">#617882</color>
+    <color name="widget_faint">#899A9F</color>
+
+    <color name="widget_sky">#1083CA</color>
+    <color name="widget_sky_soft">#DDEFFC</color>
+    <color name="widget_leaf">#639C49</color>
+    <color name="widget_leaf_dark">#3F7E3E</color>
+    <color name="widget_leaf_soft">#DDEED5</color>
+    <color name="widget_tea">#FFF2CE</color>
+    <color name="widget_wood">#9B654A</color>
+    <color name="widget_warning">#9A6337</color>
+
+    <color name="widget_progress_track">#3A58727C</color>
+    <color name="widget_task_done">#6E8589</color>
+    <color name="widget_badge_firefox">#F5E0C8</color>
+    <color name="widget_badge_chatgpt">#DCE9E2</color>
+</resources>

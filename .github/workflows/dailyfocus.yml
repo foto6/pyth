@@ -42,120 +42,42 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Restore last green source
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p build-src
-          base64 -d dailyfocus-src.tar.gz.b64 | tar -xzf - -C build-src
-          test -f build-src/DailyFocus/app/build.gradle.kts
-          test -f build-src/DailyFocus/app/src/main/AndroidManifest.xml
-
-      - name: Apply reviewed current patch
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat patches/dailyfocus.patch.00               patches/dailyfocus.patch.01               patches/dailyfocus.patch.02               patches/dailyfocus.patch.03               patches/dailyfocus.patch.04 > dailyfocus-current.patch
-
-          # Reproduce the responsive-widget change that was part of the last green CI build.
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path("build-src/DailyFocus/app/src/main/java/com/foto6/dailyfocus/widget/DailyFocusWidgetProvider.kt")
-          s = p.read_text()
-          old = """            val (showStatus, showApps, maxTasks) = when {
-                          widgetHeight < 220 -> Triple(false, false, 1)
-                          widgetHeight < 280 -> Triple(true, false, 2)
-                          else -> Triple(true, true, 4)
-                      }"""
-          new = """            val (showStatus, showApps, maxTasks) = when {
-                          widgetHeight < 230 -> Triple(false, false, 1)
-                          widgetHeight < 285 -> Triple(true, false, 2)
-                          widgetHeight < 320 -> Triple(true, true, 3)
-                          else -> Triple(true, true, 4)
-                      }"""
-          if old not in s:
-              raise SystemExit("expected green-CI responsive widget block not found")
-          p.write_text(s.replace(old, new))
-          PY
-
-          # README is documentation and may differ from the build snapshot; exclude its diff.
-          awk 'BEGIN{n=0} /^diff -ruN /{n++} n>=2{print}' dailyfocus-current.patch > dailyfocus-code.patch
-          patch --batch --forward -p0 -d build-src < dailyfocus-code.patch
-          patch --batch --forward -p0 -d build-src < patches/dailyfocus-hardening.patch
-
-          # README is packaging documentation, not a build dependency.
-          if [ ! -f build-src/DailyFocus/README.md ]; then
-            printf '%s\n' '# Daily Focus' '' 'Локальный Android-ежедневник: Firefox + ChatGPT, дневная цель и задачи.' > build-src/DailyFocus/README.md
-          fi
-          sed -i 's/сравнивает его с дневным лимитом/сравнивает его с дневной целью/g' build-src/DailyFocus/README.md
-          sed -i 's/Настраиваемый дневной лимит/Настраиваемая дневная цель/g' build-src/DailyFocus/README.md
-          sed -i 's/статусом лимита/статусом цели/g' build-src/DailyFocus/README.md
-          sed -i 's/«Лимит»/«Цель»/g' build-src/DailyFocus/README.md
-          sed -i 's/изменить дневной лимит/изменить дневную цель/g' build-src/DailyFocus/README.md
-
-
-      - name: Apply wallpaper-matched widget redesign
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "1ac940e79b08e24efe92227e5778e63bc6b92dfb43ddad216d3e9a2be5b5d98f  widget-redesign-overlay.tar.gz" | sha256sum -c -
-          python3 - <<'PY'
-          from pathlib import PurePosixPath
-          import tarfile
-          archive = "widget-redesign-overlay.tar.gz"
-          with tarfile.open(archive, "r:gz") as tf:
-              members = tf.getmembers()
-              if len(members) != 16:
-                  raise SystemExit(f"unexpected overlay file count: {len(members)}")
-              for member in members:
-                  path = PurePosixPath(member.name)
-                  if path.is_absolute() or ".." in path.parts or not member.isfile():
-                      raise SystemExit(f"unsafe overlay entry: {member.name}")
-          PY
-          tar -xzf widget-redesign-overlay.tar.gz -C build-src/DailyFocus
-          test -f build-src/DailyFocus/tools/widget_layout_stress.py
-
-      - name: Apply ergonomic task interaction v2
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "c6766454491347e30b6e415c103a59ee3b6f8330813b54d65a7384e367b64aee  ci/apply_widget_ux_v2.py" | sha256sum -c -
-          python3 ci/apply_widget_ux_v2.py build-src/DailyFocus
-
-      - name: Generate Gradle wrapper
-        working-directory: build-src/DailyFocus
-        run: gradle wrapper --gradle-version 8.10.2
-
       - name: Static verification
-        run: python3 build-src/DailyFocus/tools/static_verify.py
+        run: python3 DailyFocus/tools/static_verify.py
 
       - name: Widget layout stress test
-        run: python3 build-src/DailyFocus/tools/widget_layout_stress.py
+        run: python3 DailyFocus/tools/widget_layout_stress.py
 
       - name: Visual preview smoke test
         continue-on-error: true
         env:
           DAILYFOCUS_VISUAL_OUT: ${{ runner.temp }}/dailyfocus-visual
-        run: python3 build-src/DailyFocus/tools/visual_smoke.py
+        run: python3 DailyFocus/tools/visual_smoke.py
 
       - name: Unit tests and debug APK
-        working-directory: build-src/DailyFocus
+        working-directory: DailyFocus
         run: gradle --no-daemon clean testDebugUnitTest assembleDebug --stacktrace
 
       - name: Re-sign APK with stable DailyFocus dev key
         shell: bash
         run: |
           set -euo pipefail
-          APK="build-src/DailyFocus/app/build/outputs/apk/debug/app-debug.apk"
-          SIGNED="build-src/DailyFocus/app/build/outputs/apk/debug/app-debug-stable.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$HOME/.android/debug.keystore"             --ks-pass pass:android             --ks-key-alias androiddebugkey             --key-pass pass:android             --out "$SIGNED"             "$APK"
+          APK="DailyFocus/app/build/outputs/apk/debug/app-debug.apk"
+          SIGNED="DailyFocus/app/build/outputs/apk/debug/app-debug-stable.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-pass pass:android \
+            --ks-key-alias androiddebugkey \
+            --key-pass pass:android \
+            --out "$SIGNED" \
+            "$APK"
           mv "$SIGNED" "$APK"
 
       - name: Verify APK structure and signature
         shell: bash
         run: |
           set -euo pipefail
-          APK="build-src/DailyFocus/app/build/outputs/apk/debug/app-debug.apk"
+          APK="DailyFocus/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           unzip -t "$APK" >/dev/null
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signing.txt
@@ -167,7 +89,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tar -czf DailyFocus-tested-source.tar.gz -C build-src DailyFocus
+          tar --exclude='DailyFocus/.gradle' --exclude='DailyFocus/app/build' -czf DailyFocus-tested-source.tar.gz DailyFocus
 
       - name: Upload final APK, source and reports
         uses: actions/upload-artifact@v4
@@ -175,8 +97,8 @@ jobs:
           name: DailyFocus-final
           if-no-files-found: error
           path: |
-            build-src/DailyFocus/app/build/outputs/apk/debug/app-debug.apk
-            build-src/DailyFocus/app/build/reports/tests/testDebugUnitTest/**
+            DailyFocus/app/build/outputs/apk/debug/app-debug.apk
+            DailyFocus/app/build/reports/tests/testDebugUnitTest/**
             DailyFocus-tested-source.tar.gz
             apk-badging.txt
             apk-signing.txt
