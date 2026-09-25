@@ -1,0 +1,73 @@
+name: DailyFocus Android CI
+
+on:
+  push:
+    branches: [daily-focus-ci]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d dailyfocus-ci-source.tar.gz.b64 > dailyfocus-ci-source.tar.gz
+          echo "96080ced39b1de40f18ec283530071670845803b17787b57fbbbcccefcd58737  dailyfocus-ci-source.tar.gz" | sha256sum -c -
+          tar -xzf dailyfocus-ci-source.tar.gz
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android 35 SDK
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Static verification
+        run: python3 DailyFocus/tools/static_verify.py
+
+      - name: Visual preview smoke test (non-fatal)
+        continue-on-error: true
+        env:
+          DAILYFOCUS_VISUAL_OUT: ${{ runner.temp }}/dailyfocus-visual
+        run: python3 DailyFocus/tools/visual_smoke.py
+
+      - name: Unit tests and debug APK
+        working-directory: DailyFocus
+        run: gradle --no-daemon clean testDebugUnitTest assembleDebug
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DailyFocus-debug
+          path: DailyFocus/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DailyFocus-test-reports
+          path: |
+            DailyFocus/app/build/reports/tests/testDebugUnitTest/**
+            DailyFocus/app/build/test-results/testDebugUnitTest/**
+          if-no-files-found: warn
