@@ -47,9 +47,49 @@ jobs:
         run: |
           set -euo pipefail
           cat patches/dailyfocus.patch.00               patches/dailyfocus.patch.01               patches/dailyfocus.patch.02               patches/dailyfocus.patch.03               patches/dailyfocus.patch.04 > dailyfocus-current.patch
-          patch --batch --forward -p0 -d build-src < dailyfocus-current.patch
-          sed -i 's/Настраиваемый дневную цель/Настраиваемая дневная цель/' build-src/DailyFocus/README.md
-          sed -i 's/статусом лимита/статусом цели/' build-src/DailyFocus/README.md
+
+          # Reproduce the responsive-widget change that was part of the last green CI build.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("build-src/DailyFocus/app/src/main/java/com/foto6/dailyfocus/widget/DailyFocusWidgetProvider.kt")
+          s = p.read_text()
+          old = """            val (showStatus, showApps, maxTasks) = when {
+                          widgetHeight < 220 -> Triple(false, false, 1)
+                          widgetHeight < 280 -> Triple(true, false, 2)
+                          else -> Triple(true, true, 4)
+                      }"""
+          new = """            val (showStatus, showApps, maxTasks) = when {
+                          widgetHeight < 230 -> Triple(false, false, 1)
+                          widgetHeight < 285 -> Triple(true, false, 2)
+                          widgetHeight < 320 -> Triple(true, true, 3)
+                          else -> Triple(true, true, 4)
+                      }"""
+          if old not in s:
+              raise SystemExit("expected green-CI responsive widget block not found")
+          p.write_text(s.replace(old, new))
+          PY
+
+          # README is documentation and may differ from the build snapshot; exclude its diff.
+          awk 'BEGIN{n=0} /^diff -ruN /{n++} n>=2{print}' dailyfocus-current.patch > dailyfocus-code.patch
+          patch --batch --forward -p0 -d build-src < dailyfocus-code.patch
+
+          # Keep documentation aligned, but never use it as a build-critical patch target.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("build-src/DailyFocus/README.md")
+          if p.exists():
+              s = p.read_text()
+              replacements = {
+                  "сравнивает его с дневным лимитом": "сравнивает его с дневной целью",
+                  "Настраиваемый дневной лимит": "Настраиваемая дневная цель",
+                  "статусом лимита": "статусом цели",
+                  "плашку **«Лимит»**": "плашку **«Цель»**",
+                  "изменить дневной лимит": "изменить дневную цель",
+              }
+              for a, b in replacements.items():
+                  s = s.replace(a, b)
+              p.write_text(s)
+          PY
 
       - name: Static verification
         run: python3 build-src/DailyFocus/tools/static_verify.py
