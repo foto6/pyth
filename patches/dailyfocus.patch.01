@@ -1,0 +1,145 @@
+tDuration(FocusMath.remainingMs(total, limitMinutes))}"
++                    over > 0 -> "Цель выполнена · +${FocusMath.formatDuration(over)}"
++                    else -> "Осталось ${FocusMath.formatDuration(FocusMath.remainingMs(total, goalMinutes))}"
+                 },
+-                color = if (over > 0 && usage.hasPermission) MaterialTheme.colorScheme.error
++                color = if (over > 0 && usage.hasPermission) MaterialTheme.colorScheme.primary
+                 else MaterialTheme.colorScheme.onSurfaceVariant,
+                 fontWeight = FontWeight.Medium
+             )
+@@ -511,17 +510,17 @@
+ }
+ 
+ @Composable
+-private fun LimitDialog(currentMinutes: Int, onDismiss: () -> Unit, onSave: (Int) -> Unit) {
++private fun GoalDialog(currentMinutes: Int, onDismiss: () -> Unit, onSave: (Int) -> Unit) {
+     var minutesText by remember(currentMinutes) { mutableStateOf(currentMinutes.toString()) }
+-    val parsed = minutesText.toIntOrNull()?.takeIf { it in SettingsStore.MIN_LIMIT..SettingsStore.MAX_LIMIT }
++    val parsed = minutesText.toIntOrNull()?.takeIf { it in SettingsStore.MIN_GOAL..SettingsStore.MAX_GOAL }
+ 
+     AlertDialog(
+         onDismissRequest = onDismiss,
+-        title = { Text("Дневной лимит") },
++        title = { Text("Дневная цель") },
+         text = {
+             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                 Text(
+-                    "Общий лимит для Firefox + ChatGPT. Можно поставить от 15 минут до 24 часов.",
++                    "Общая цель для Firefox + ChatGPT. Можно поставить от 15 минут до 24 часов.",
+                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                 )
+                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+@@ -533,7 +532,7 @@
+                             else MaterialTheme.colorScheme.surfaceVariant
+                         ) {
+                             Text(
+-                                text = FocusMath.formatLimit(minutes),
++                                text = FocusMath.formatGoal(minutes),
+                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                 color = if (minutesText == minutes.toString()) MaterialTheme.colorScheme.onPrimary
+                                 else MaterialTheme.colorScheme.onSurfaceVariant,
+@@ -549,7 +548,7 @@
+                     label = { Text("Минут") },
+                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                     supportingText = {
+-                        if (parsed != null) Text("Это ${FocusMath.formatLimit(parsed)}")
++                        if (parsed != null) Text("Это ${FocusMath.formatGoal(parsed)}")
+                     },
+                     modifier = Modifier.fillMaxWidth(),
+                     singleLine = true
+diff -ruN '--exclude=.gradle' '--exclude=build' df_old/DailyFocus/app/src/main/java/com/foto6/dailyfocus/core/FocusMath.kt DailyFocus/app/src/main/java/com/foto6/dailyfocus/core/FocusMath.kt
+--- df_old/DailyFocus/app/src/main/java/com/foto6/dailyfocus/core/FocusMath.kt	2026-09-25 07:10:32.000000000 +0000
++++ DailyFocus/app/src/main/java/com/foto6/dailyfocus/core/FocusMath.kt	2026-09-25 07:31:51.301467408 +0000
+@@ -19,23 +19,23 @@
+         }
+     }
+ 
+-    fun formatLimit(minutes: Int): String = formatDuration(minutes.coerceAtLeast(0) * MINUTE_MS)
++    fun formatGoal(minutes: Int): String = formatDuration(minutes.coerceAtLeast(0) * MINUTE_MS)
+ 
+-    fun progressPermille(usedMs: Long, limitMinutes: Int): Int {
+-        if (limitMinutes <= 0) return 0
+-        val limitMs = limitMinutes * MINUTE_MS
+-        return ((usedMs.coerceAtLeast(0).toDouble() / limitMs) * 1000.0)
++    fun progressPermille(usedMs: Long, goalMinutes: Int): Int {
++        if (goalMinutes <= 0) return 0
++        val goalMs = goalMinutes * MINUTE_MS
++        return ((usedMs.coerceAtLeast(0).toDouble() / goalMs) * 1000.0)
+             .roundToInt()
+             .coerceIn(0, 1000)
+     }
+ 
+-    fun overLimitMs(usedMs: Long, limitMinutes: Int): Long {
+-        val limitMs = limitMinutes.coerceAtLeast(0) * MINUTE_MS
+-        return (usedMs.coerceAtLeast(0L) - limitMs).coerceAtLeast(0L)
++    fun overGoalMs(usedMs: Long, goalMinutes: Int): Long {
++        val goalMs = goalMinutes.coerceAtLeast(0) * MINUTE_MS
++        return (usedMs.coerceAtLeast(0L) - goalMs).coerceAtLeast(0L)
+     }
+ 
+-    fun remainingMs(usedMs: Long, limitMinutes: Int): Long {
+-        val limitMs = limitMinutes.coerceAtLeast(0) * MINUTE_MS
+-        return (limitMs - usedMs.coerceAtLeast(0L)).coerceAtLeast(0L)
++    fun remainingMs(usedMs: Long, goalMinutes: Int): Long {
++        val goalMs = goalMinutes.coerceAtLeast(0) * MINUTE_MS
++        return (goalMs - usedMs.coerceAtLeast(0L)).coerceAtLeast(0L)
+     }
+ }
+diff -ruN '--exclude=.gradle' '--exclude=build' df_old/DailyFocus/app/src/main/java/com/foto6/dailyfocus/core/WidgetLayoutPolicy.kt DailyFocus/app/src/main/java/com/foto6/dailyfocus/core/WidgetLayoutPolicy.kt
+--- df_old/DailyFocus/app/src/main/java/com/foto6/dailyfocus/core/WidgetLayoutPolicy.kt	1970-01-01 00:00:00.000000000 +0000
++++ DailyFocus/app/src/main/java/com/foto6/dailyfocus/core/WidgetLayoutPolicy.kt	2026-09-25 07:31:35.855399016 +0000
+@@ -0,0 +1,16 @@
++package com.foto6.dailyfocus.core
++
++data class WidgetLayout(
++    val showStatus: Boolean,
++    val showApps: Boolean,
++    val maxTasks: Int
++)
++
++object WidgetLayoutPolicy {
++    fun forHeight(heightDp: Int): WidgetLayout = when {
++        heightDp < 230 -> WidgetLayout(showStatus = false, showApps = false, maxTasks = 1)
++        heightDp < 285 -> WidgetLayout(showStatus = true, showApps = false, maxTasks = 2)
++        heightDp < 320 -> WidgetLayout(showStatus = true, showApps = true, maxTasks = 3)
++        else -> WidgetLayout(showStatus = true, showApps = true, maxTasks = 4)
++    }
++}
+diff -ruN '--exclude=.gradle' '--exclude=build' df_old/DailyFocus/app/src/main/java/com/foto6/dailyfocus/data/SettingsStore.kt DailyFocus/app/src/main/java/com/foto6/dailyfocus/data/SettingsStore.kt
+--- df_old/DailyFocus/app/src/main/java/com/foto6/dailyfocus/data/SettingsStore.kt	2026-09-25 07:05:03.000000000 +0000
++++ DailyFocus/app/src/main/java/com/foto6/dailyfocus/data/SettingsStore.kt	2026-09-25 07:31:35.854828957 +0000
+@@ -5,17 +5,17 @@
+ class SettingsStore(context: Context) {
+     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+ 
+-    var limitMinutes: Int
+-        get() = prefs.getInt(KEY_LIMIT_MINUTES, DEFAULT_LIMIT_MINUTES).coerceIn(MIN_LIMIT, MAX_LIMIT)
++    var goalMinutes: Int
++        get() = prefs.getInt(KEY_GOAL_MINUTES, DEFAULT_GOAL_MINUTES).coerceIn(MIN_GOAL, MAX_GOAL)
+         set(value) {
+-            prefs.edit().putInt(KEY_LIMIT_MINUTES, value.coerceIn(MIN_LIMIT, MAX_LIMIT)).commit()
++            prefs.edit().putInt(KEY_GOAL_MINUTES, value.coerceIn(MIN_GOAL, MAX_GOAL)).commit()
+         }
+ 
+     companion object {
+-        const val DEFAULT_LIMIT_MINUTES = 120
+-        const val MIN_LIMIT = 15
+-        const val MAX_LIMIT = 24 * 60
++        const val DEFAULT_GOAL_MINUTES = 120
++        const val MIN_GOAL = 15
++        const val MAX_GOAL = 24 * 60
+         private const val PREFS = "daily_focus_settings"
+-        private const val KEY_LIMIT_MINUTES = "limit_minutes"
++        private const val KEY_GOAL_MINUTES = "goal_minutes"
+     }
+ }
+diff -ruN '--exclude=.gradle' '--exclude=build' df_old/DailyFocus/app/src/main/java/com/foto6/dailyfocus/usage/UsageCacheStore.kt DailyFocus/app/src/main/java/com/foto6/dailyfocus/usage/UsageCacheStore.kt
+--- df_old/DailyFocus/app/src/main/java/com/foto6/dailyfocus/usage/UsageCacheStore.kt	2026-09-25 07:05:03.000000000 +0000
++++ DailyFocus/app/src/main/java/com/foto6/dailyfocus/usage/UsageCacheStore.kt	2026-09-25 07:31:35.855346868 +0000
+@@ -1,6 +1,7 @@
+ package com.foto6.dailyfocus.usage
+ 
+ import android.content.Context
++import java.util.Calendar
+ 
+ class UsageCac
